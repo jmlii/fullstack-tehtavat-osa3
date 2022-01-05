@@ -10,8 +10,8 @@ const cors = require('cors')
 app.use(cors())
 
 const morgan = require('morgan')
-morgan.token('post-data', (request, response) => {
-  if (request.method === "POST") {
+morgan.token('post-data', (request) => {
+  if (request.method === 'POST') {
     return (JSON.stringify(request.body))
   }
 })
@@ -21,7 +21,11 @@ const errorHandler = (error, request, response, next) => {
   console.error(error.message)
 
   if (error.name === 'CastError') {
-    return response.status(400).send({ error: 'malformatted id' })
+    return response.status(400).send({ error: 'Malformatted id' })
+  } else if (error.name === 'ValidationError') {
+    return response.status(400).json({ error: error.message })
+  } else if (error.name === 'UniqueValidationError') {
+    return response.status(400).json({ error: error.message })
   }
 
   next(error)
@@ -31,16 +35,16 @@ app.get('/api/info', (request, response) => {
   Person.find({}).
     then(persons => {
       response.send(
-      `<p>Phonebook has info for ${persons.length} people</p>
-      <p>${new Date()}`
-    )
-  })
-  
+        `<p>Phonebook has info for ${persons.length} people</p>
+        <p>${new Date()}`
+      )
+    })
+
 })
 
 app.get('/api/persons', (request, response) => {
   Person.find({}).then(persons => {
-  response.json(persons)
+    response.json(persons)
   })
 })
 
@@ -58,40 +62,37 @@ app.get('/api/persons/:id', (request, response, next) => {
 
 app.delete('/api/persons/:id', (request, response, next) => {
   Person.findByIdAndRemove(request.params.id)
-    .then(result => {
+    .then(() => {
       response.status(204).end()
     })
     .catch(error => next(error))
 })
 
-app.post('/api/persons', (request, response) => {
+app.post('/api/persons', (request, response, next) => {
   const body = request.body
-  
-  if (!body.name) {
-    return response.status(400).json({ 
-      error: 'Name or number missing.' 
-    })
-  } 
-   
+
   const person = new Person({
     name: body.name,
     number: body.number,
   })
-  
-  person.save().then(savedPerson => {
-    response.json(savedPerson)
-  })
+
+  person.save()
+    .then(savedPerson => savedPerson.toJSON())
+    .then(savedAndFormattedPerson => {
+      response.json(savedAndFormattedPerson)
+    })
+    .catch(error => next(error))
 })
 
 app.put('/api/persons/:id', (request, response, next) => {
   const body = request.body
-  
+
   const person = {
     name: body.name,
     number: body.number,
   }
-  
-  Person.findByIdAndUpdate(request.params.id, person, {new: true})
+
+  Person.findByIdAndUpdate(request.params.id, person, { new: true, runValidators: true, context: 'query' })
     .then(updatedPerson => {
       response.json(updatedPerson)
     })
